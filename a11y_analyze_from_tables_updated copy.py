@@ -675,11 +675,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-'''Из корня проекта (E:\\Project_audi):
-(.venv) python a11y_build_tables.py
-(.venv) python a11y_analyze_from_tables.py
-
-Из корня проекта (E:\\Project_audi):
-(.venv) python a11y_build_tables.py --results_dir E:\\Project_audi\\results_20260225_114251
-(.venv) python a11y_analyze_from_tables.py --results_dir E:\\Project_audi\\results_20260225_114251'''
