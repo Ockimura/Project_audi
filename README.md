@@ -1,9 +1,106 @@
 В данном проекте я реаллизую исследование доступности гос сайтов. Пока мой первый гит сырой, но постараюсь всё красиво оформить
 
-# Сбор данных с страниц
+# Логика аудита
+'''
+[Playwright аудит]
+        ↓
+JSON (на каждый URL)
+        ↓
+build_tables.py
+        ↓
+CSV таблицы (raw + pairs)
+        ↓
+a11y_analyze_from_tables_updated copy.py
+        ↓
+статистика + графики + отчёт
+'''
+# info_aggregation.py
 
-# Анализ axe, wave, dom данных
+## Пайплайн
 
+1. читает URL,
+1. запускает Chromium с WAVE,
+1. открывает страницу,
+1. ждёт ручной pause/resume,
+1. считает DOM,
+1. запускает axe,
+1. создаёт manual-структуру,
+1. ждёт ручной запуск WAVE,
+1. сохраняет MHTML,
+1. вытаскивает оттуда WAVE-метрики,
+1. пишет JSON.
+
+# build_tables.py
+
+Это основной “сборщик таблиц” из JSON
+
+Он делает:
+
+1. Находит последний запуск results_YYYYMMDD_HHMMSS через: find_latest_results_dir()
+2. Читает все JSON Из папки: results_xxx/json/
+3. Извлекает ключевые метрики
+4. Создаёт 2 таблицы: 
+    + raw_pages.csv
+    + pairs.csv, результаты аудита сайта сфгруппированы попарно normal_* low_*
+
+# analyze_from_tables_updated.py
+## Проверки
+### H1 — сравнение manual vs axe
+Берёт severity_mean(...) и переводит категории ошибок в числа
+
+затем считает по ```wilcoxon_test(...)``` effect sixe (dz) и power
+
+### H2 — структура (visible)
+
+Сравнивает:
+
+```normal vs low_vision```
+
+по:
+
++ dom_total_visible
++ links_visible
++ buttons_visible
++ forms_visible
++ images_visible
+
+### H3 — ошибки
+
+Сравнивает:
+
+```aim_score vs axe_ratio```
+
+
+### H4 — корреляции
+
+Пример: 
+```dom_total_visible vs axe_nodes_count```
+и:
+```dom_total vs aim_score```
+
+Вопрос: влияет ли размер DOM на количество ошибок?
+
+## Результаты
+### Графики
+
+Создаёт:
+
++ scatter plot
++ histogram Δ
++ boxplot
+
+### файлы в конце
+
+Создаёт:
+
+```
+tables/
+    raw_pages.csv
+    pairs.csv
+    figures/
+    report.md
+    h_tests.json
+```
 # Компоненты страниц
 
 ## Стартовый классификатор компонентов и ошибок
@@ -310,3 +407,15 @@ def attach_axe_errors_to_components(components, axe_errors):
 ### Шаг 4
 
 Сохранение размеченного JSON.
+
+## MVP программы 0 
+
+Максимально простой вариант Python + браузер, интерфейс запускается как обычная веб страница
+
+1. Python backend
+2. HTML - страница
+3. Кнопка:
+    + "Открыть страницу"
+    + вызывает Playwright
+    + получает данные
+    + показывает их

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>A11Y Annotation MVP</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+
+    .block {
+      margin-bottom: 20px;
+      padding: 10px;
+      border: 1px solid #ccc;
+    }
+
+    button {
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+
+    input {
+      padding: 8px;
+    }
+
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #f7f7f7;
+      padding: 10px;
+      border: 1px solid #ddd;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>A11Y Annotation MVP</h2>
+
+  <div class="block">
+    <input id="url" placeholder="https://site.gov" style="width: 70%;">
+    <button onclick="analyze()">Открыть страницу</button>
+  </div>
+
+  <div class="block">
+    <h3>Статус</h3>
+    <pre id="status"></pre>
+  </div>
+
+  <div class="block">
+    <h3>AXE ошибки</h3>
+    <pre id="axe"></pre>
+  </div>
+
+  <div class="block">
+    <h3>DOM (первые элементы)</h3>
+    <pre id="dom"></pre>
+  </div>
+
+  <script>
+    async function analyze() {
+      const url = document.getElementById("url").value;
+
+      const res = await fetch("http://127.0.0.1:8000/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: url })
+      });
+
+      const data = await res.json();
+
+      document.getElementById("status").innerText =
+        JSON.stringify(data.status, null, 2);
+
+      document.getElementById("axe").innerText =
+        JSON.stringify(data.axe_result, null, 2);
+
+      document.getElementById("dom").innerText =
+        JSON.stringify((data.raw_elements || []).slice(0, 20), null, 2);
+    }
+  </script>
+
+</body>
+</html>
