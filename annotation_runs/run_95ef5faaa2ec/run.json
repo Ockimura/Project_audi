@@ -1,0 +1,26 @@
+{
+  "run_id": "run_95ef5faaa2ec",
+  "url": "https://sledcom.ru/",
+  "final_url": "https://sledcom.ru/",
+  "title": null,
+  "dom_total": 0,
+  "status": {
+    "navigation": {
+      "status": "error",
+      "message": "Navigation failed: Page.title: 'str' object has no attribute 'error_text'",
+      "started_at": 1776388834.8561628,
+      "finished_at": 1776388839.8171375,
+      "details": {}
+    }
+  },
+  "raw_elements": [],
+  "axe_result": {},
+  "wave_placeholder": {},
+  "page_html_path": null,
+  "screenshot_path": null,
+  "console_messages": [
+    "info: Version: 2.109.0-embed",
+    "info: New session_id generated. sessionId: '52018280171776388837_1776388837723'"
+  ],
+  "network_errors": []
+}
