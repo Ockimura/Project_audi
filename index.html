@@ -1,84 +1,829 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <title>A11Y Annotation MVP</title>
+  <meta charset="UTF-8" />
+  <title>A11Y Annotation Tool</title>
   <style>
     body {
       font-family: Arial, sans-serif;
-      margin: 20px;
+      margin: 16px;
+      background: #f6f7fb;
     }
 
-    .block {
-      margin-bottom: 20px;
-      padding: 10px;
-      border: 1px solid #ccc;
+    h1, h2, h3 {
+      margin-top: 0;
+    }
+
+    .topbar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    input, select, textarea, button {
+      padding: 8px;
+      font-size: 14px;
+    }
+
+    input[type="text"] {
+      min-width: 380px;
     }
 
     button {
-      padding: 8px 12px;
       cursor: pointer;
     }
 
-    input {
-      padding: 8px;
+    .layout {
+      display: grid;
+      grid-template-columns: 320px 1fr 360px;
+      gap: 16px;
+      align-items: start;
     }
 
-    pre {
+    .panel {
+      background: white;
+      border: 1px solid #d9dce5;
+      border-radius: 10px;
+      padding: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    }
+
+    .list {
+      max-height: 72vh;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .item {
+      border: 1px solid #d9dce5;
+      border-radius: 8px;
+      padding: 8px;
+      background: #fafbff;
+    }
+
+    .item.active {
+      border-color: #2d5bff;
+      background: #eef3ff;
+    }
+
+    .item-title {
+      font-weight: bold;
+      margin-bottom: 4px;
+    }
+
+    .small {
+      font-size: 12px;
+      color: #555;
+      word-break: break-word;
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #eceff7;
+      margin-right: 6px;
+      margin-top: 4px;
+      font-size: 12px;
+    }
+
+    .error-tag {
+      background: #ffe7e7;
+    }
+
+    .wave-tag {
+      background: #fff2da;
+    }
+
+    .quality-tag {
+      background: #e7f6eb;
+    }
+
+    pre, textarea.code {
       white-space: pre-wrap;
       word-break: break-word;
-      background: #f7f7f7;
-      padding: 10px;
+      background: #f8f8f8;
       border: 1px solid #ddd;
+      padding: 10px;
+      border-radius: 8px;
+      max-height: 220px;
+      overflow: auto;
+    }
+
+    .row {
+      margin-bottom: 10px;
+    }
+
+    .muted {
+      color: #666;
+      font-size: 13px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .danger {
+      color: #a40000;
+    }
+
+    .ok {
+      color: #0a7a2f;
     }
   </style>
 </head>
 <body>
+  <h1>A11Y Annotation Tool</h1>
 
-  <h2>A11Y Annotation MVP</h2>
-
-  <div class="block">
-    <input id="url" placeholder="https://site.gov" style="width: 70%;">
-    <button onclick="analyze()">Открыть страницу</button>
+  <div class="topbar">
+    <input id="urlInput" type="text" placeholder="https://site.gov/page" />
+    <button onclick="analyzePage()">Открыть страницу</button>
+    <button onclick="exportAnnotations()">Экспорт JSON</button>
   </div>
 
-  <div class="block">
-    <h3>Статус</h3>
-    <pre id="status"></pre>
-  </div>
+  <div class="layout">
+    <div class="panel">
+      <h2>Компоненты</h2>
+      <div class="row">
+        <label>Фильтр типа:</label><br>
+        <select id="componentFilter" onchange="renderComponents()">
+          <option value="all">Все</option>
+        </select>
+      </div>
+      <div id="componentsList" class="list"></div>
+    </div>
 
-  <div class="block">
-    <h3>AXE ошибки</h3>
-    <pre id="axe"></pre>
-  </div>
+    <div class="panel">
+      <h2>Выбранный компонент</h2>
+      <div id="selectedComponentView" class="muted">Выбери компонент слева</div>
+    </div>
 
-  <div class="block">
-    <h3>DOM (первые элементы)</h3>
-    <pre id="dom"></pre>
+    <div class="panel">
+      <h2>Ошибки и статус</h2>
+      <div class="row">
+        <h3>Статусы этапов</h3>
+        <pre id="statusView"></pre>
+      </div>
+      <div class="row">
+        <h3>Непривязанные AXE ошибки</h3>
+        <div id="unassignedErrors" class="list"></div>
+      </div>
+      <div class="row">
+        <h3>WAVE (ручной ввод)</h3>
+        <textarea id="waveManual" class="code" placeholder='Например:
+{
+  "low_contrast": 3,
+  "missing_alt": 2
+}'></textarea>
+        <div class="actions">
+          <button onclick="saveWaveManual()">Сохранить WAVE в run</button>
+          <button onclick="applyWaveManualToSelected()">Добавить WAVE к выбранному компоненту</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
-    async function analyze() {
-      const url = document.getElementById("url").value;
+    let currentRun = null;
+    let components = [];
+    let selectedComponentId = null;
 
-      const res = await fetch("http://127.0.0.1:8000/analyze", {
+    const COMPONENT_TYPES = [
+      "button",
+      "pseudo_button",
+      "link",
+      "navigation_link",
+      "external_link",
+      "image",
+      "background_image",
+      "form",
+      "form_control",
+      "heading",
+      "navigation",
+      "table",
+      "list",
+      "section",
+      "article",
+      "header",
+      "footer",
+      "main",
+      "search",
+      "custom"
+    ];
+
+    function classifyElement(el) {
+      const tag = (el.tag || "").toLowerCase();
+      const role = (el.role || "").toLowerCase();
+      const attrs = el.attrs || {};
+      const href = attrs.href || "";
+      const type = (attrs.type || "").toLowerCase();
+      const children = new Set(el.children_tags || []);
+
+      if (el.has_background_image || (el.computed_background_image && el.computed_background_image !== "none")) {
+        return { autoType: "background_image", manualType: "background_image" };
+      }
+
+      if (tag === "button") {
+        return { autoType: "button", manualType: "button" };
+      }
+
+      if (tag === "input" && ["submit", "button", "reset"].includes(type)) {
+        return { autoType: "button", manualType: "button" };
+      }
+
+      if (role === "button" || (el.has_onclick && !["a", "button", "input"].includes(tag))) {
+        return { autoType: "pseudo_button", manualType: "pseudo_button" };
+      }
+
+      if (tag === "a") {
+        if (el.nearest_landmark === "nav") {
+          return { autoType: "link", manualType: "navigation_link" };
+        }
+        if (href && href.startsWith("http")) {
+          try {
+            const targetHost = new URL(href).host;
+            const currentHost = new URL(el.source_url || currentRun?.final_url || currentRun?.url || "").host;
+            if (targetHost && currentHost && targetHost !== currentHost) {
+              return { autoType: "link", manualType: "external_link" };
+            }
+          } catch (_) {}
+        }
+        return { autoType: "link", manualType: "link" };
+      }
+
+      if (tag === "img") {
+        return { autoType: "image", manualType: "image" };
+      }
+
+      if (tag === "form") {
+        return { autoType: "form", manualType: "form" };
+      }
+
+      if (tag === "input" && type !== "hidden") {
+        return { autoType: "form_control", manualType: "form_control" };
+      }
+
+      if (tag === "select" || tag === "textarea") {
+        return { autoType: "form_control", manualType: "form_control" };
+      }
+
+      if (/^h[1-6]$/.test(tag)) {
+        return { autoType: "heading", manualType: "heading" };
+      }
+
+      if (tag === "nav" || role === "navigation") {
+        return { autoType: "navigation", manualType: "navigation" };
+      }
+
+      if (tag === "table") {
+        return { autoType: "table", manualType: "table" };
+      }
+
+      if (tag === "ul" || tag === "ol") {
+        return { autoType: "list", manualType: "list" };
+      }
+
+      if (["header", "footer", "main", "section", "article"].includes(tag)) {
+        return { autoType: tag, manualType: tag };
+      }
+
+      return null;
+    }
+
+    function qualityFlagsForComponent(component) {
+      const el = component.raw;
+      const tag = (el.tag || "").toLowerCase();
+      const attrs = el.attrs || {};
+      const text = (el.text || "").trim();
+      const flags = [];
+
+      if (component.manualType === "heading") {
+        const level = tag.match(/^h([1-6])$/);
+        if (level) component.headingLevel = parseInt(level[1], 10);
+      }
+
+      if (component.manualType === "link") {
+        if (!text) flags.push("empty");
+        if (!attrs.href || attrs.href === "#") flags.push("no_href");
+      }
+
+      if (component.manualType === "navigation_link") {
+        if (!text) flags.push("empty");
+      }
+
+      if (component.manualType === "button" || component.manualType === "pseudo_button") {
+        const ariaLabel = (attrs["aria-label"] || "").trim();
+        const hasIconOnly = (el.children_tags || []).includes("svg") || (el.children_tags || []).includes("img");
+        if (!text && !ariaLabel) flags.push("no_name");
+        if (hasIconOnly && !text) flags.push("icon_only");
+        if (component.manualType === "pseudo_button") flags.push("pseudo_button");
+      }
+
+      if (component.manualType === "image") {
+        if (!("alt" in attrs)) flags.push("missing_alt");
+        else if (attrs.alt === "") flags.push("empty_alt");
+      }
+
+      if (component.manualType === "background_image") {
+        flags.push("needs_manual_review");
+      }
+
+      if (component.manualType === "form_control") {
+        const hasLabel = !!attrs["aria-label"] || !!attrs["label_text"] || !!attrs["label_xpath"];
+        if (!hasLabel) flags.push("no_label");
+        if (attrs.placeholder && !hasLabel) flags.push("placeholder_only");
+      }
+
+      return flags;
+    }
+
+    function extractComponents(rawElements) {
+      let result = [];
+      let index = 1;
+
+      for (const el of rawElements || []) {
+        const cls = classifyElement(el);
+        if (!cls) continue;
+
+        const component = {
+          id: "cmp_" + String(index++).padStart(5, "0"),
+          autoType: cls.autoType,
+          manualType: cls.manualType,
+          manualSubtype: "",
+          xpath: el.xpath,
+          html: el.html || "",
+          text: el.text || "",
+          verified: false,
+          raw: el,
+          axe: [],
+          wave: [],
+          quality: [],
+          notes: ""
+        };
+
+        component.quality = qualityFlagsForComponent(component);
+        result.push(component);
+      }
+
+      applyHeadingPageRules(result);
+      return result;
+    }
+
+    function applyHeadingPageRules(components) {
+      const headings = components.filter(c => c.manualType === "heading");
+      const levels = headings
+        .map(h => h.headingLevel)
+        .filter(x => typeof x === "number");
+
+      const h1Count = levels.filter(x => x === 1).length;
+      const missingH1 = h1Count === 0;
+      const tooManyH1 = h1Count > 1;
+
+      let brokenHierarchy = false;
+      for (let i = 0; i < levels.length - 1; i++) {
+        if ((levels[i + 1] - levels[i]) > 1) {
+          brokenHierarchy = true;
+          break;
+        }
+      }
+
+      for (const h of headings) {
+        if (missingH1 && !h.quality.includes("missing_h1")) h.quality.push("missing_h1");
+        if (tooManyH1 && !h.quality.includes("too_many_h1")) h.quality.push("too_many_h1");
+        if (brokenHierarchy && !h.quality.includes("broken_hierarchy")) h.quality.push("broken_hierarchy");
+      }
+    }
+
+    function normalizeAxeErrors(axeResult) {
+      const out = [];
+      const violations = axeResult?.result?.violations || [];
+      let idx = 1;
+
+      for (const violation of violations) {
+        for (const node of (violation.nodes || [])) {
+          const target = Array.isArray(node.target) ? node.target[0] : null;
+          out.push({
+            id: "axe_" + idx++,
+            source: "axe",
+            type: violation.id,
+            description: violation.description || "",
+            impact: violation.impact || "",
+            targetXpath: target,
+            assignedComponentId: null
+          });
+        }
+      }
+
+      return out;
+    }
+
+    function attachAxeErrorsToComponents(errors) {
+      for (const error of errors) {
+        if (!error.targetXpath) continue;
+
+        let matched = null;
+        for (const component of components) {
+          if (!component.xpath) continue;
+
+          if (
+            error.targetXpath === component.xpath ||
+            error.targetXpath.startsWith(component.xpath + "/")
+          ) {
+            matched = component;
+            break;
+          }
+        }
+
+        if (matched) {
+          error.assignedComponentId = matched.id;
+          matched.axe.push(error.type);
+        }
+      }
+    }
+
+    async function analyzePage() {
+      const url = document.getElementById("urlInput").value.trim();
+      if (!url) {
+        alert("Введи URL");
+        return;
+      }
+
+      document.getElementById("statusView").textContent = "Загрузка...";
+
+      try {
+        const res = await fetch("http://127.0.0.1:8000/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url })
+        });
+
+        if (!res.ok) {
+          const text = await res.text();
+          document.getElementById("statusView").textContent =
+            "HTTP error " + res.status + "\\n\\n" + text;
+          return;
+        }
+
+        currentRun = await res.json();
+        components = extractComponents(currentRun.raw_elements || []);
+
+        const axeErrors = normalizeAxeErrors(currentRun.axe_result || {});
+        currentRun.normalizedAxeErrors = axeErrors;
+        attachAxeErrorsToComponents(axeErrors);
+
+        selectedComponentId = components.length ? components[0].id : null;
+
+        populateFilterOptions();
+        renderStatus();
+        renderComponents();
+        renderSelectedComponent();
+        renderUnassignedErrors();
+      } catch (err) {
+        document.getElementById("statusView").textContent =
+          "Ошибка запроса:\\n\\n" + err;
+      }
+    }
+
+    function populateFilterOptions() {
+      const select = document.getElementById("componentFilter");
+      const values = new Set(["all"]);
+      for (const c of components) values.add(c.manualType);
+
+      select.innerHTML = "";
+      for (const value of values) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = value === "all" ? "Все" : value;
+        select.appendChild(option);
+      }
+    }
+
+    function renderStatus() {
+      document.getElementById("statusView").textContent =
+        JSON.stringify(currentRun?.status || {}, null, 2);
+    }
+
+    function renderComponents() {
+      const list = document.getElementById("componentsList");
+      const filter = document.getElementById("componentFilter").value;
+      list.innerHTML = "";
+
+      const filtered = components.filter(c => filter === "all" || c.manualType === filter);
+
+      for (const component of filtered) {
+        const div = document.createElement("div");
+        div.className = "item" + (component.id === selectedComponentId ? " active" : "");
+        div.onclick = () => {
+          selectedComponentId = component.id;
+          renderComponents();
+          renderSelectedComponent();
+          renderUnassignedErrors();
+        };
+
+        div.innerHTML = `
+          <div class="item-title">${component.manualType}</div>
+          <div class="small">${component.xpath || ""}</div>
+          <div class="small">${escapeHtml((component.text || "").slice(0, 80))}</div>
+          <div>
+            <span class="tag">auto: ${component.autoType}</span>
+            ${component.verified ? '<span class="tag">verified</span>' : ''}
+            ${component.axe.length ? `<span class="tag error-tag">axe: ${component.axe.length}</span>` : ''}
+            ${component.wave.length ? `<span class="tag wave-tag">wave: ${component.wave.length}</span>` : ''}
+          </div>
+        `;
+        list.appendChild(div);
+      }
+    }
+
+    function getSelectedComponent() {
+      return components.find(c => c.id === selectedComponentId) || null;
+    }
+
+    function renderSelectedComponent() {
+      const view = document.getElementById("selectedComponentView");
+      const c = getSelectedComponent();
+      if (!c) {
+        view.textContent = "Выбери компонент слева";
+        return;
+      }
+
+      const unassignedErrors = (currentRun.normalizedAxeErrors || []).filter(e => !e.assignedComponentId);
+
+      view.innerHTML = `
+        <div class="row">
+          <label>Тип:</label><br>
+          <select id="selectedType">${COMPONENT_TYPES.map(type =>
+            `<option value="${type}" ${type === c.manualType ? "selected" : ""}>${type}</option>`
+          ).join("")}</select>
+        </div>
+
+        <div class="row">
+          <label>Ручной подтип:</label><br>
+          <input id="selectedSubtype" type="text" value="${escapeAttr(c.manualSubtype || "")}">
+        </div>
+
+        <div class="row">
+          <label><input type="checkbox" id="selectedVerified" ${c.verified ? "checked" : ""}> verified</label>
+        </div>
+
+        <div class="row">
+          <label>Заметки:</label><br>
+          <textarea id="selectedNotes">${escapeHtml(c.notes || "")}</textarea>
+        </div>
+
+        <div class="row">
+          <strong>XPath</strong>
+          <pre>${escapeHtml(c.xpath || "")}</pre>
+        </div>
+
+        <div class="row">
+          <strong>HTML</strong>
+          <pre>${escapeHtml(c.html || "")}</pre>
+        </div>
+
+        <div class="row">
+          <strong>AXE</strong><br>
+          ${(c.axe || []).map(x => `<span class="tag error-tag">${x}</span>`).join("") || '<span class="muted">нет</span>'}
+        </div>
+
+        <div class="row">
+          <strong>WAVE</strong><br>
+          ${(c.wave || []).map(x => `<span class="tag wave-tag">${x}</span>`).join("") || '<span class="muted">нет</span>'}
+        </div>
+
+        <div class="row">
+          <strong>Quality</strong><br>
+          ${(c.quality || []).map(x => `<span class="tag quality-tag">${x}</span>`).join("") || '<span class="muted">нет</span>'}
+        </div>
+
+        <div class="actions">
+          <button onclick="saveSelectedComponent()">Сохранить изменения</button>
+          <button onclick="addQualityFlag()">Добавить quality флаг</button>
+          <button onclick="addManualComponent()">Добавить компонент вручную</button>
+        </div>
+
+        <div class="row" style="margin-top:16px;">
+          <h3>Непривязанные AXE ошибки → к этому компоненту</h3>
+          <div class="list">
+            ${unassignedErrors.map(err => `
+              <div class="item">
+                <div class="item-title">${err.type}</div>
+                <div class="small">${escapeHtml(err.targetXpath || "")}</div>
+                <div class="actions">
+                  <button onclick="assignErrorToSelected('${err.id}')">Привязать</button>
+                </div>
+              </div>
+            `).join("") || '<div class="muted">нет непривязанных ошибок</div>'}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderUnassignedErrors() {
+      const wrap = document.getElementById("unassignedErrors");
+      wrap.innerHTML = "";
+
+      const errors = (currentRun?.normalizedAxeErrors || []).filter(e => !e.assignedComponentId);
+
+      if (!errors.length) {
+        wrap.innerHTML = '<div class="muted">Все AXE ошибки привязаны</div>';
+        return;
+      }
+
+      for (const err of errors) {
+        const div = document.createElement("div");
+        div.className = "item";
+        div.innerHTML = `
+          <div class="item-title">${err.type}</div>
+          <div class="small">${escapeHtml(err.targetXpath || "")}</div>
+          <div class="small">${escapeHtml(err.description || "")}</div>
+        `;
+        wrap.appendChild(div);
+      }
+    }
+
+    function saveSelectedComponent() {
+      const c = getSelectedComponent();
+      if (!c) return;
+
+      c.manualType = document.getElementById("selectedType").value;
+      c.manualSubtype = document.getElementById("selectedSubtype").value;
+      c.verified = document.getElementById("selectedVerified").checked;
+      c.notes = document.getElementById("selectedNotes").value;
+
+      renderComponents();
+      renderSelectedComponent();
+    }
+
+    function assignErrorToSelected(errorId) {
+      const c = getSelectedComponent();
+      if (!c) return;
+
+      const err = (currentRun.normalizedAxeErrors || []).find(x => x.id === errorId);
+      if (!err) return;
+
+      err.assignedComponentId = c.id;
+      if (!c.axe.includes(err.type)) c.axe.push(err.type);
+
+      renderComponents();
+      renderSelectedComponent();
+      renderUnassignedErrors();
+    }
+
+    function addQualityFlag() {
+      const c = getSelectedComponent();
+      if (!c) return;
+
+      const flag = prompt("Введи quality-флаг:");
+      if (!flag) return;
+
+      if (!c.quality.includes(flag)) c.quality.push(flag);
+      renderSelectedComponent();
+      renderComponents();
+    }
+
+    function addManualComponent() {
+      const html = prompt("HTML компонента:");
+      if (html === null) return;
+
+      const xpath = prompt("XPath компонента:");
+      if (xpath === null) return;
+
+      const type = prompt("Тип компонента:", "custom") || "custom";
+
+      const newCmp = {
+        id: "cmp_" + String(components.length + 1).padStart(5, "0"),
+        autoType: "custom",
+        manualType: type,
+        manualSubtype: "",
+        xpath,
+        html,
+        text: "",
+        verified: false,
+        raw: {},
+        axe: [],
+        wave: [],
+        quality: [],
+        notes: "Добавлен вручную"
+      };
+
+      components.push(newCmp);
+      selectedComponentId = newCmp.id;
+      populateFilterOptions();
+      renderComponents();
+      renderSelectedComponent();
+    }
+
+    async function saveWaveManual() {
+      if (!currentRun?.run_id) {
+        alert("Сначала проанализируй страницу");
+        return;
+      }
+
+      let parsed;
+      try {
+        parsed = JSON.parse(document.getElementById("waveManual").value || "{}");
+      } catch (e) {
+        alert("WAVE JSON некорректный");
+        return;
+      }
+
+      const res = await fetch(`http://127.0.0.1:8000/runs/${currentRun.run_id}/wave`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: url })
+        body: JSON.stringify({
+          run_id: currentRun.run_id,
+          wave_errors: parsed
+        })
       });
 
-      const data = await res.json();
+      if (!res.ok) {
+        alert("Не удалось сохранить WAVE");
+        return;
+      }
 
-      document.getElementById("status").innerText =
-        JSON.stringify(data.status, null, 2);
+      currentRun = await res.json();
+      renderStatus();
+      alert("WAVE сохранён");
+    }
 
-      document.getElementById("axe").innerText =
-        JSON.stringify(data.axe_result, null, 2);
+    function applyWaveManualToSelected() {
+      const c = getSelectedComponent();
+      if (!c) {
+        alert("Сначала выбери компонент");
+        return;
+      }
 
-      document.getElementById("dom").innerText =
-        JSON.stringify((data.raw_elements || []).slice(0, 20), null, 2);
+      let parsed;
+      try {
+        parsed = JSON.parse(document.getElementById("waveManual").value || "{}");
+      } catch (e) {
+        alert("WAVE JSON некорректный");
+        return;
+      }
+
+      for (const [key, count] of Object.entries(parsed)) {
+        const n = Number(count) || 0;
+        for (let i = 0; i < n; i++) {
+          c.wave.push(key);
+        }
+      }
+
+      renderComponents();
+      renderSelectedComponent();
+    }
+
+    function exportAnnotations() {
+      const payload = {
+        run_id: currentRun?.run_id || null,
+        url: currentRun?.final_url || currentRun?.url || null,
+        title: currentRun?.title || null,
+        status: currentRun?.status || {},
+        components: components.map(c => ({
+          id: c.id,
+          auto_type: c.autoType,
+          manual_type: c.manualType,
+          manual_subtype: c.manualSubtype,
+          verified: c.verified,
+          xpath: c.xpath,
+          html: c.html,
+          text: c.text,
+          axe: c.axe,
+          wave: c.wave,
+          quality: c.quality,
+          notes: c.notes
+        })),
+        unassigned_axe_errors: (currentRun?.normalizedAxeErrors || []).filter(e => !e.assignedComponentId),
+        wave_summary: currentRun?.wave_placeholder || {}
+      };
+
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "annotation_result.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function escapeHtml(str) {
+      return String(str || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+    }
+
+    function escapeAttr(str) {
+      return String(str || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll('"', "&quot;");
     }
   </script>
-
 </body>
 </html>
