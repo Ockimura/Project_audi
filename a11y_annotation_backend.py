@@ -237,7 +237,7 @@ async def install_event_logging(page: Page, run: AnnotationRun) -> None:
     page.on(
         "requestfailed",
         lambda req: run.network_errors.append(
-            f"{req.method} {req.url} :: {req.failure.error_text if req.failure else 'unknown'}"
+            f"{req.method} {req.url} :: {req.failure if req.failure else 'unknown'}"
         ),
     )
 
