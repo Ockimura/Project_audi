@@ -22,3 +22,5 @@ git_commands.md
 a11y_build_tables_short.py
 
 a11y_analyze_from_tables_updated copy.py
+
+html_test/__pycache__
