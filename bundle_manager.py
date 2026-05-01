@@ -67,17 +67,17 @@ class BundleManifest:
 # TIME HELPERS
 # ============================================================
 
-
+# Возвращает текущее время UTC.
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-
+# Возвращает текущее время строкой.
 def iso_now() -> str:
     return utc_now().isoformat()
 
 
-
+# Преобразует строку времени обратно в datetime. Если времени нет или оно сломано — вернёт None.
 def parse_iso_datetime(value: Optional[str]) -> Optional[datetime]:
     if not value:
         return None
@@ -94,7 +94,6 @@ def parse_iso_datetime(value: Optional[str]) -> Optional[datetime]:
 # SAFE URL / BUNDLE NAME
 # ============================================================
 
-
 def make_safe_url(url: str, max_length: int = 140) -> str:
     """
     Converts URL to a filesystem-safe name.
@@ -102,28 +101,31 @@ def make_safe_url(url: str, max_length: int = 140) -> str:
     Example:
     https://sledcom.ru/news?id=1 -> sledcom.ru_news_id_1
     """
-    parsed = urlparse(url.strip())
+    parsed = urlparse(url.strip()) # Разбирает URL.
 
-    if parsed.netloc:
+    if parsed.netloc: # Берёт домен + путь.
         raw = parsed.netloc + parsed.path
-        if parsed.query:
+        if parsed.query: # Добавляет query-параметры.
             raw += "_" + parsed.query
     else:
         raw = url.strip()
+        # если остался https чистим вручную
         raw = re.sub(r"^https?://", "", raw, flags=re.IGNORECASE)
 
     raw = raw.strip().strip("/")
+    # Все опасные символы заменяет на _
     safe = re.sub(r"[^A-Za-zА-Яа-я0-9._-]+", "_", raw)
+    # Несколько _ подряд заменяет на один.
     safe = re.sub(r"_+", "_", safe)
     safe = safe.strip("_")
 
     if not safe:
         safe = "unknown_url"
-
+    # Обрезает слишком длинное имя.
     return safe[:max_length]
 
 
-
+# Создаёт полное имя bundle.
 def make_bundle_id(url: str, created_at: Optional[datetime] = None) -> str:
     dt = created_at or utc_now()
     safe_url = make_safe_url(url)
@@ -201,7 +203,7 @@ def load_manifest(bundle_dir: Path) -> Dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-
+# Обновляет manifest частично. Например, можно обновить только status.
 def update_manifest(bundle_dir: Path, updates: Dict[str, Any]) -> Dict[str, Any]:
     manifest = load_manifest(bundle_dir)
 
@@ -215,7 +217,7 @@ def update_manifest(bundle_dir: Path, updates: Dict[str, Any]) -> Dict[str, Any]
     return manifest
 
 
-
+# Отметка сохранённого файла. Используется после того, как какой-то файл был сохранён.
 def mark_file_saved(
     bundle_dir: Path,
     logical_name: str,
@@ -240,7 +242,7 @@ def mark_file_saved(
     return manifest
 
 
-
+# Если этап упал, например AXE не запустился, сохраняет данные об ошибке
 def mark_stage_error(bundle_dir: Path, status_key: str, error: str) -> Dict[str, Any]:
     manifest = load_manifest(bundle_dir)
     manifest.setdefault("status", {})[status_key] = "error"
@@ -330,7 +332,7 @@ def is_bundle_actual(bundle_dir: Path, now: Optional[datetime] = None) -> bool:
     )
 
 
-
+# Обновление статуса valid / actual
 def refresh_manifest_validity(bundle_dir: Path) -> Dict[str, Any]:
     valid = is_bundle_valid(bundle_dir)
     actual = is_bundle_actual(bundle_dir)
@@ -349,7 +351,7 @@ def refresh_manifest_validity(bundle_dir: Path) -> Dict[str, Any]:
 # BUNDLE SEARCH
 # ============================================================
 
-
+# Поиск bundle
 def list_bundles() -> List[Path]:
     if not BUNDLES_DIR.exists():
         return []
@@ -410,7 +412,7 @@ def choose_bundle_for_url(url: str, mode: str = "reuse_if_actual") -> Optional[P
 # FILE PATH HELPERS
 # ============================================================
 
-
+# Пути к файлам внутри bundle
 def bundle_file(bundle_dir: Path, logical_name: str) -> Path:
     manifest = load_manifest(bundle_dir)
     files = manifest.get("files", {})
@@ -420,7 +422,7 @@ def bundle_file(bundle_dir: Path, logical_name: str) -> Path:
     return bundle_dir / filename
 
 
-
+# Сохраняет JSON-файл в bundle.
 def write_bundle_json(bundle_dir: Path, logical_name: str, payload: Dict[str, Any]) -> Path:
     path = bundle_file(bundle_dir, logical_name)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -449,7 +451,7 @@ def write_bundle_json(bundle_dir: Path, logical_name: str, payload: Dict[str, An
     return path
 
 
-
+# Сохраняет текстовый файл, например MHTML.
 def write_bundle_text(bundle_dir: Path, logical_name: str, content: str) -> Path:
     path = bundle_file(bundle_dir, logical_name)
     path.write_text(content, encoding="utf-8", errors="ignore")
@@ -476,14 +478,16 @@ def write_bundle_text(bundle_dir: Path, logical_name: str, content: str) -> Path
 # CLI TEST
 # ============================================================
 
-
+# выполняется только если файл запускается напрямую папка_с_файлом> python bundle_manager.py
 if __name__ == "__main__":
+    # Пытается найти актуальный bundle для sledcom.ru.
     test_url = "https://sledcom.ru/"
     bundle = choose_bundle_for_url(test_url, mode="reuse_if_actual")
-
     if bundle:
+        # Если нашёл — пишет, что будет использовать старый.
         print(f"Reuse actual bundle: {bundle}")
     else:
+        # Если не нашёл — создаёт новый.
         bundle = create_bundle_dir(test_url, mode="normal")
         print(f"Created bundle: {bundle}")
         print(f"Manifest: {manifest_path(bundle)}")
