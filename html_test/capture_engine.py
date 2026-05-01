@@ -245,7 +245,7 @@ async def collect_dom(page: Page) -> Dict[str, Any]:
         "elements": elements,
         "summary": build_dom_summary(elements, visible_only=False),
         "visible_summary": build_dom_summary(elements, visible_only=True),
-        "excluded": build_excluded_summary(elements),
+        "hidden": build_hidden_summary(elements),
         "heading_sequence": [e["tag"] for e in elements if e.get("tag") in {"h1", "h2", "h3", "h4", "h5", "h6"}],
     }
 
@@ -265,40 +265,40 @@ def build_dom_summary(elements: List[Dict[str, Any]], visible_only: bool = False
     return summary
 
 
-# в прошлых версиях excluded было для э-в исключённых из анализа, а в этой версии мы ищём скрытые от пользователя элементы
-def build_excluded_summary(elements: List[Dict[str, Any]]) -> Dict[str, int]:
-    excluded = {
-        "excluded_dom": 0,
-        "excluded_links": 0,
-        "excluded_buttons": 0,
-        "excluded_images": 0,
-        "excluded_h1": 0,
-        "excluded_h2": 0,
-        "excluded_h3": 0,
-        "excluded_h4": 0,
-        "excluded_ul": 0,
-        "excluded_ol": 0,
+# мы ищём скрытые от пользователя элементы
+def build_hidden_summary(elements: List[Dict[str, Any]]) -> Dict[str, int]:
+    hidden = {
+        "hidden_dom": 0,
+        "hidden_links": 0,
+        "hidden_buttons": 0,
+        "hidden_images": 0,
+        "hidden_h1": 0,
+        "hidden_h2": 0,
+        "hidden_h3": 0,
+        "hidden_h4": 0,
+        "hidden_ul": 0,
+        "hidden_ol": 0,
     }
 
     for element in elements:
         if element.get("visible"):
             continue
-        excluded["excluded_dom"] += 1
+        hidden["hidden_dom"] += 1
         tag = (element.get("tag") or "").lower()
         if tag == "a":
-            excluded["excluded_links"] += 1
+            hidden["hidden_links"] += 1
         elif tag == "button":
-            excluded["excluded_buttons"] += 1
+            hidden["hidden_buttons"] += 1
         elif tag == "img":
-            excluded["excluded_images"] += 1
+            hidden["hidden_images"] += 1
         elif tag in {"h1", "h2", "h3", "h4"}:
-            excluded[f"excluded_{tag}"] += 1
+            hidden[f"hidden_{tag}"] += 1
         elif tag == "ul":
-            excluded["excluded_ul"] += 1
+            hidden["hidden_ul"] += 1
         elif tag == "ol":
-            excluded["excluded_ol"] += 1
+            hidden["hidden_ol"] += 1
 
-    return excluded
+    return hidden
 
 async def run_axe(page: Page) -> Dict[str, Any]:
     try:
