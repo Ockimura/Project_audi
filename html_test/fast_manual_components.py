@@ -30,10 +30,16 @@
 '''
 
 import json
-from datetime import datetime
 import hashlib
 import re
 import os
+from datetime import datetime, timezone, timedelta
+from typing import Any, Dict, Optional, List
+from pathlib import Path
+from urllib.parse import urlparse
+
+RESULTS_DIR = Path("url") # html_test/url
+TIME_FORMAT = "%d_%m_%y__%H_%M_%S"
 
 BASE_TYPES = [
     "button",
@@ -51,18 +57,82 @@ BASE_TYPES = [
     "section"
 ]
 
-def make_safe_url_name(url: str) -> str:
-    # убираем протокол
-    url = re.sub(r'^https?://', '', url)
+# ============================================================
+# TIME HELPERS
+# ============================================================
 
-    # заменяем всё странное на _
-    safe = re.sub(r'[^a-zA-Z0-9]', '_', url)
+# Возвращает текущее время UTC.
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
-    # хеш (короткий)
-    h = hashlib.md5(url.encode()).hexdigest()[:6]
 
-    return f"{safe}_{h}"
+# Возвращает текущее время строкой.
+def iso_now() -> str:
+    return utc_now().isoformat()
 
+
+# Преобразует строку времени обратно в datetime. Если времени нет или оно сломано — вернёт None.
+def parse_iso_datetime(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(value)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    except Exception:
+        return None
+
+# ============================================================
+# SAFE URL / BUNDLE NAME
+# ============================================================
+
+def make_safe_url(url: str, max_length: int = 140) -> str:
+    """
+    Converts URL to a filesystem-safe name.
+
+    Example:
+    https://sledcom.ru/news?id=1 -> sledcom.ru_news_id_1
+    """
+    parsed = urlparse(url.strip()) # Разбирает URL.
+
+    if parsed.netloc: # Берёт домен + путь.
+        raw = parsed.netloc + parsed.path
+        if parsed.query: # Добавляет query-параметры.
+            raw += "_" + parsed.query
+    else:
+        raw = url.strip()
+        # если остался https чистим вручную
+        raw = re.sub(r"^https?://", "", raw, flags=re.IGNORECASE)
+
+    raw = raw.strip().strip("/")
+    # Все опасные символы заменяет на _
+    safe = re.sub(r"[^A-Za-zА-Яа-я0-9._-]+", "_", raw)
+    # Несколько _ подряд заменяет на один.
+    safe = re.sub(r"_+", "_", safe)
+    safe = safe.strip("_")
+
+    if not safe:
+        safe = "unknown_url"
+    # Обрезает слишком длинное имя.
+    return safe[:max_length]
+
+# Создаёт полное имя manual.
+def make_results_id(url: str, created_at: Optional[datetime] = None) -> str:
+    dt = created_at or utc_now()
+    safe_url = make_safe_url(url)
+    return f"{safe_url}__{dt.strftime(TIME_FORMAT)}"
+
+# ============================================================
+# RESULT DIR CREATION
+# ============================================================
+
+def create_results_dir(url: str, mode: str = "normal", final_url: Optional[str] = None) -> Path:
+    created = utc_now()
+    results_id = make_results_id(url, created)
+    results_dir = RESULTS_DIR / results_id
+    results_dir.mkdir(parents=True, exist_ok=False)
+    return results_dir
 
 def normalize_html(html: str) -> str:
     return " ".join(html.split())
@@ -123,22 +193,28 @@ def main():
     print("=== Manual Component Annotation Tool ===")
 
     url = input("URL: ").strip()
-    safe_name = make_safe_url_name(url)+f"{int(datetime.utcnow().timestamp())}"
-    print(f"💡 Сохрани axe как: {safe_name}_axe.json")
+    safe_name = make_safe_url(url)
     mode = input("Mode (normal/low_visual): ").strip() or "normal"
+    result_dir = create_results_dir(url,mode)
+    # 1. Формируем путь по умолчанию внутри result_dir
+    default_axe = result_dir/"axe.json"
+    print(f"💡 Сохрани axe в папку {result_dir} как: axe.json")  
+    # 2. Предлагаем этот путь пользователю
+    axe_path = Path(input(f"Путь к axe.json (Enter = {default_axe}): ").strip() or default_axe)
+
+    # Проверка существования файла
+    while not axe_path.exists():
+        print(f"❌ Ошибка: Файл не найден по пути {axe_path}")
+        axe_path = Path(input("Введите новый путь: ").strip())
+
+    print(f"✅ Файл найден, продолжаем работу...")
 
     axe_data = None
-    default_axe = f"{safe_name}_axe.json"
-    axe_path = input(f"Путь к axe.json (Enter = {default_axe}): ").strip()
-
     components = {}  # grouped by type
     html_index = {}  # hash → (type, id)
     type_list = []   # для нумерации
 
     counter = 1
-
-    if not axe_path:
-        axe_path = default_axe
 
     if axe_path and os.path.exists(axe_path):
         with open(axe_path, "r", encoding="utf-8") as f:
