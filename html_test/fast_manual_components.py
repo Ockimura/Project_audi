@@ -188,6 +188,46 @@ def input_multiline(prompt: str) -> str:
 def generate_id(counter: int) -> str:
     return f"cmp_{counter:04d}"
 
+# Получаем тип компонента (по имени или номеру) - возможно пересмотреть логику так как создание нового типа тоже тут
+def get_component_type(raw_type: str, type_list: List[str], components: Dict[str, List[Dict[str, Any]]]) -> str:
+    # Если введён номер, преобразуем в индекс
+    if raw_type.isdigit():
+        idx = int(raw_type) - 1
+        if 0 <= idx < len(type_list):
+            return type_list[idx]
+        else:
+            print("❌ Неверный номер, попробуй снова.")
+            return None
+
+    # Если введён текст, ищем полное совпадение с существующими типами
+    raw_type = raw_type.strip().lower()  # Приводим к нижнему регистру и очищаем от лишних пробелов
+    
+    # Если найдено полное совпадение
+    if raw_type in type_list:
+        return raw_type
+    
+    # Если текст не совпадает с существующими типами, показываем существующие типы и предлагаем новый ввод
+    print("❗ Тип не найден среди существующих. Вот доступные типы:")
+    for i, t in enumerate(type_list, start=1):
+        print(f"{i} - {t}")
+    
+    # Запросить у пользователя новый тип
+    new_type = input(f"Введите новый тип компонента (или выберите из списка): ").strip().lower()
+
+    # Повторно проверяем, совпадает ли новый тип с существующими
+    if new_type in type_list:
+        return new_type
+    else:
+        # Предлагаем создать новый тип
+        confirm = input(f"❗ Новый тип '{new_type}' не найден. Хотите создать новый тип? (y/n): ").strip().lower()
+        if confirm == 'y':
+            components[new_type] = []
+            type_list.append(new_type)
+            return new_type
+        else:
+            print("❌ Новый тип не создан, попробуйте снова.")
+            return None
+
 
 def main():
     print("=== Manual Component Annotation Tool ===")
@@ -196,9 +236,11 @@ def main():
     safe_name = make_safe_url(url)
     mode = input("Mode (normal/low_visual): ").strip() or "normal"
     result_dir = create_results_dir(url,mode)
+
     # 1. Формируем путь по умолчанию внутри result_dir
     default_axe = result_dir/"axe.json"
     print(f"💡 Сохрани axe в папку {result_dir} как: axe.json")  
+    
     # 2. Предлагаем этот путь пользователю
     axe_path = Path(input(f"Путь к axe.json (Enter = {default_axe}): ").strip() or default_axe)
 
@@ -212,52 +254,35 @@ def main():
     axe_data = None
     components = {}  # grouped by type
     html_index = {}  # hash → (type, id)
-    type_list = []   # для нумерации
+    type_list = BASE_TYPES   # для нумерации
 
     counter = 1
 
-    if axe_path and os.path.exists(axe_path):
+    if axe_path and axe_path.exists():
         with open(axe_path, "r", encoding="utf-8") as f:
             axe_data = json.load(f)
         print("✅ axe.json загружен")
 
     while True:
-
         print("\nДобавить компонент? (y/n)")
-        if input().strip().lower() != "y":
+        value = input().strip().lower()
+        while value not in ["y","n"]:
+            print("\n❌ Неверный ввод. Введите 'y' для продолжения или 'n' для выхода.")
+            value = input().strip().lower()
+
+        if value == "n":
             break
 
         # показать список типов
-        if type_list:
-            print("\nСуществующие типы:")
-            for i, t in enumerate(type_list, start=1):
-                print(f"{i} - {t}")
+        print("\nСуществующие типы:")
+        for i, t in enumerate(type_list, start=1):
+            print(f"{i} - {t}")
+        
+        component_type = None
 
-        raw_type = input("\nТип компонента (название или номер): ").strip().lower()
-
-        # если ввод текстом — показать подсказки
-        if not raw_type.isdigit():
-            suggestions = suggest_types(raw_type, type_list)
-            if len(suggestions) == 1:
-                auto = suggestions[0]
-                print(f"👉 Автовыбор: {auto}")
-                raw_type = auto
-            elif suggestions:
-                print("Подсказки:", ", ".join(suggestions))
-
-        # если введён номер
-        if raw_type.isdigit():
-            idx = int(raw_type) - 1
-            if 0 <= idx < len(type_list):
-                component_type = type_list[idx]
-            else:
-                print("❌ Неверный номер, попробуй снова")
-                continue
-        else:
-            component_type = raw_type.lower()
-            if component_type not in components:
-                components[component_type] = []
-                type_list.append(component_type)
+        while not component_type:
+            raw_type = input("\nТип компонента (название или номер): ").strip().lower()
+            component_type = get_component_type(raw_type, type_list, components)
 
         html = input_multiline("HTML компонента:")
         h = hash_html(html)
@@ -265,7 +290,8 @@ def main():
         if h in html_index:
             existing_type, existing_id = html_index[h]
             print(f"⚠️ Дубликат найден: {existing_type} ({existing_id})")
-
+            continue
+        
         axe_violations = find_axe_violations(html, axe_data)
 
         component = {
