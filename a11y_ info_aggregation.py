@@ -17,7 +17,7 @@ fill_audi.py
     - в каждой ноде: manual_impact, manual_overridden
 
 Важно:
-- Этот файл ориентирован на интерактивный процесс (pause/resume), как у тебя было.
+- Этот файл ориентирован на интерактивный процесс (pause/resume).
 """
 
 from __future__ import annotations
