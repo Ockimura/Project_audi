@@ -99,7 +99,7 @@ def axe_node_uid(rule_id: Any, impact: Any, html_snippet: Any, targets: Any) -> 
 
 def ensure_manual_section(result: Dict[str, Any]) -> None:
     """
-    Инициализация manual-структуры на базе axe (без фейков).
+    Инициализация manual-структуры на базе axe.
     """
     axe = result.get("axe")
     if not isinstance(axe, dict):
