@@ -14,6 +14,7 @@ profile/
 no_results/
 
 results_20260225_114251/
+results_20260514_140403/
 
 wave_extension/
 
@@ -28,3 +29,7 @@ html_test/__pycache__
 url/
 
 annotation_runs/
+
+urls_for_elements.txt
+urls_full.txt
+urls_have_low.txt
